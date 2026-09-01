@@ -4,12 +4,12 @@ import { api } from '../api';
 const STEP = { PHONE: 'phone', CODE: 'code', TWO_FA: '2fa' };
 
 export default function LoginScreen({ onLoggedIn }) {
-  const [step, setStep]       = useState(STEP.PHONE);
-  const [phone, setPhone]     = useState('');
-  const [code, setCode]       = useState('');
+  const [step, setStep] = useState(STEP.PHONE);
+  const [phone, setPhone] = useState('');
+  const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState('');
+  const [error, setError] = useState('');
 
   async function handleSendCode(e) {
     e.preventDefault();
@@ -98,7 +98,7 @@ export default function LoginScreen({ onLoggedIn }) {
       {step === STEP.CODE && (
         <form className="login-form" onSubmit={handleVerifyCode}>
           <label className="input-label">Verification code</label>
-          <p className="hint-text">Enter the code sent to {phone} via Telegram</p>
+          <p className="hint-text">Enter the code sent to you in the bot</p>
           <input
             className="input input-code"
             type="text"
