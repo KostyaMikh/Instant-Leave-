@@ -16,8 +16,10 @@ module.exports = async function handler(req, res) {
   const normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`;
 
   try {
-    const { phoneCodeHash } = await sendCode(normalizedPhone);
-    await savePendingAuth(telegramId, normalizedPhone, phoneCodeHash);
+    // sendCode now returns sessionString too — we store it so verify-code
+    // can reconnect to the same Telegram DC (fully stateless between calls)
+    const { phoneCodeHash, sessionString } = await sendCode(normalizedPhone);
+    await savePendingAuth(telegramId, normalizedPhone, phoneCodeHash, sessionString);
     return res.json({ ok: true, message: 'Code sent' });
   } catch (err) {
     console.error('[auth/send-code]', err.message);

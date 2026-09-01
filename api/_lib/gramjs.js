@@ -5,10 +5,6 @@ const { Api } = require('telegram');
 const API_ID = parseInt(process.env.API_ID);
 const API_HASH = process.env.API_HASH;
 
-// In-memory map for clients mid-auth (lives for the duration of the serverless
-// function warm instance — enough time for the user to enter their code)
-const pendingClients = new Map();
-
 function makeClient(sessionString = '') {
   const session = new StringSession(sessionString);
   return new TelegramClient(session, API_ID, API_HASH, {
@@ -19,6 +15,12 @@ function makeClient(sessionString = '') {
 
 // ── Auth ──────────────────────────────────────────────────
 
+/**
+ * Sends a login code to the phone number.
+ * Creates a fresh client each time — fully stateless.
+ * Returns { phoneCodeHash, sessionString } — we save the session
+ * string to Redis so verify-code can reuse the same auth state.
+ */
 async function sendCode(phone) {
   const client = makeClient();
   await client.connect();
@@ -28,47 +30,48 @@ async function sendCode(phone) {
     phone
   );
 
-  pendingClients.set(phone, client);
-  return { phoneCodeHash: result.phoneCodeHash };
+  // Save the partial session so verify-code can reconnect with same DC
+  const sessionString = client.session.save();
+  await client.disconnect();
+
+  return { phoneCodeHash: result.phoneCodeHash, sessionString };
 }
 
-async function signInWithCode(phone, phoneCodeHash, code) {
-  let client = pendingClients.get(phone);
-
-  if (!client) {
-    // Serverless cold start — recreate client and reconnect
-    client = makeClient();
-    await client.connect();
-  }
+/**
+ * Signs in with the code. Reuses the session string from sendCode
+ * so we reconnect to the correct Telegram DC.
+ */
+async function signInWithCode(phone, phoneCodeHash, code, sessionString) {
+  const client = makeClient(sessionString);
+  await client.connect();
 
   await client.invoke(
     new Api.auth.SignIn({
       phoneNumber: phone,
       phoneCodeHash,
-      phoneCode: code,
+      phoneCode: code.trim(),
     })
   );
 
-  const sessionString = client.session.save();
-  pendingClients.delete(phone);
+  const newSessionString = client.session.save();
   await client.disconnect();
-  return { sessionString };
+  return { sessionString: newSessionString };
 }
 
-async function signInWith2FA(phone, password) {
-  let client = pendingClients.get(phone);
-  if (!client) {
-    throw new Error('Session expired. Please start the login again.');
-  }
+/**
+ * Signs in with 2FA password.
+ */
+async function signInWith2FA(phone, password, sessionString) {
+  const client = makeClient(sessionString);
+  await client.connect();
 
   const passwordInfo = await client.invoke(new Api.account.GetPassword());
   const check = await client._computeCheck(passwordInfo, password);
   await client.invoke(new Api.auth.CheckPassword({ password: check }));
 
-  const sessionString = client.session.save();
-  pendingClients.delete(phone);
+  const newSessionString = client.session.save();
   await client.disconnect();
-  return { sessionString };
+  return { sessionString: newSessionString };
 }
 
 // ── Session validation ────────────────────────────────────
@@ -109,7 +112,6 @@ async function getDialogs(sessionString) {
     const isChat = entity.className === 'Chat';
     if (!isChannel && !isChat) continue;
 
-    // Skip channels the user owns (can't leave, would need to delete)
     if (isChannel && entity.creator) continue;
 
     result.push({

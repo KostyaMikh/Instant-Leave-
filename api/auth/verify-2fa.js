@@ -19,7 +19,11 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ error: 'Session expired. Please start login again.' });
     }
 
-    const { sessionString } = await signInWith2FA(pending.phone, password);
+    const { sessionString } = await signInWith2FA(
+      pending.phone,
+      password,
+      pending.sessionString
+    );
 
     await saveSession(telegramId, sessionString, pending.phone);
     await deletePendingAuth(telegramId);

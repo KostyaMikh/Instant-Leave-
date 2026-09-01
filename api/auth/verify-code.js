@@ -19,7 +19,13 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ error: 'No pending auth found. Please request a new code.' });
     }
 
-    const { sessionString } = await signInWithCode(pending.phone, pending.phoneCodeHash, code.trim());
+    // Pass the saved sessionString so GramJS reconnects to the correct DC
+    const { sessionString } = await signInWithCode(
+      pending.phone,
+      pending.phoneCodeHash,
+      code.trim(),
+      pending.sessionString
+    );
 
     await saveSession(telegramId, sessionString, pending.phone);
     await deletePendingAuth(telegramId);
@@ -36,6 +42,9 @@ module.exports = async function handler(req, res) {
     }
     if (err.message?.includes('PHONE_CODE_EXPIRED')) {
       return res.status(400).json({ error: 'Code expired. Please request a new one.' });
+    }
+    if (err.message?.includes('PHONE_NUMBER_INVALID')) {
+      return res.status(400).json({ error: 'Phone number invalid. Please go back and re-enter your number.' });
     }
 
     return res.status(500).json({ error: err.message });

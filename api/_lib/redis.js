@@ -25,10 +25,12 @@ async function deleteSession(telegramId) {
   await redis.del(`session:${telegramId}`);
 }
 
-// ── Pending auth (phone code hash while user is logging in) ──
-async function savePendingAuth(telegramId, phone, phoneCodeHash) {
+// ── Pending auth ──────────────────────────────────────────
+// Now also stores the partial sessionString from sendCode so
+// verify-code can reconnect to the same Telegram DC statlessly.
+async function savePendingAuth(telegramId, phone, phoneCodeHash, sessionString) {
   const key = `pending:${telegramId}`;
-  await redis.set(key, JSON.stringify({ phone, phoneCodeHash }), { ex: PENDING_TTL });
+  await redis.set(key, JSON.stringify({ phone, phoneCodeHash, sessionString: sessionString || '' }), { ex: PENDING_TTL });
 }
 
 async function getPendingAuth(telegramId) {
